@@ -38,6 +38,12 @@ CURRENT SETUP FOR DEVELOPMENT:
   if (!firebase.apps || firebase.apps.length === 0) {
     firebase.initializeApp(cfg);
   }
+  // Initialize Firebase App Check
+  const appCheck = firebase.appCheck();
+   appCheck.activate(
+                           '#@Brihhaspati#@123', // replace with the site key from Firebase Console
+                             true // enables token auto-refresh
+                      );
 
   // Initialize Firebase services (scoped)
   const auth = firebase.auth();
