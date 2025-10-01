@@ -12,92 +12,17 @@ let authResolved = false; // prevents showing login modal before auth state is k
 // Prefer redirect over popup for Google sign-in to avoid popup blockers
 const GOOGLE_LOGIN_MODE = 'popup'; // use popup to avoid redirect loops
 
-// Firebase Configuration - Replace with your Firebase config
-/*
-===========================================
-COMPLETE FIREBASE SETUP GUIDE
-===========================================
-
-STEP 1: CREATE FIREBASE PROJECT
-1. Go to Firebase Console: https://console.firebase.google.com/
-2. Click "Create a project" or "Add project"
-3. Enter project name (e.g., "brihaspati-stationery")
-4. Enable Google Analytics (optional)
-5. Click "Create project"
-
-STEP 2: ENABLE AUTHENTICATION
-1. In Firebase Console, click "Authentication" in left sidebar
-2. Click "Get started" if first time
-3. Go to "Sign-in method" tab
-4. Enable "Email/Password" provider:
-   - Click on Email/Password
-   - Toggle "Enable" to ON
-   - Click "Save"
-5. Enable "Google" provider:
-   - Click on Google
-   - Toggle "Enable" to ON
-   - Add your project support email
-   - Click "Save"
-
-STEP 3: ADD AUTHORIZED DOMAINS
-1. In Authentication > Settings > Authorized domains
-2. Add your domain (e.g., "localhost" for development)
-3. Add your production domain when ready
-
-STEP 4: GET FIREBASE CONFIG
-1. Click gear icon (Settings) > Project settings
-2. Scroll down to "Your apps" section
-3. Click "Web" icon (</>) to add web app
-4. Enter app nickname (e.g., "Brihaspati Stationery Web")
-5. Click "Register app"
-6. Copy the firebaseConfig object
-
-STEP 5: UPDATE YOUR CODE
-1. In index.html, uncomment these lines:
-   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-
-2. In script.js, replace the config below with your actual config
-3. Uncomment all the Firebase code blocks marked with "FIREBASE IMPLEMENTATION"
-
-*/
-
-/*
-===========================================
-SECURE FIREBASE INTEGRATION
-===========================================
-
-IMPORTANT SECURITY NOTES:
-1. Firebase config is loaded from firebase-config.js
-2. No sensitive data is logged or exposed
-3. All authentication is handled securely
-4. Orders are saved to Firestore with proper validation
-
-SETUP INSTRUCTIONS:
-1. Ensure firebase-config.js is loaded in index.html
-2. Enable Firestore Database in Firebase Console
-3. Set up Firestore security rules
-4. Test the complete flow
-
-SECURITY FEATURES:
-- No password exposure
-- Secure order confirmation
-- Input validation
-- Authentication required for orders
-- Proper error handling
-
-===========================================
-*/
+// Firebase services are initialized in firebase-config.js
 
 // Firebase services are initialized in firebase-config.js
 // Access them through window.firebaseServices
 // Use services provided by firebase-config.js
-const auth = window.firebaseServices.auth;
-const db = window.firebaseServices.db;
-const googleProvider = window.firebaseServices.googleProvider;
+const auth = window.firebaseServices && window.firebaseServices.auth ? window.firebaseServices.auth : null;
+const db = window.firebaseServices && window.firebaseServices.db ? window.firebaseServices.db : null;
+const googleProvider = window.firebaseServices && window.firebaseServices.googleProvider ? window.firebaseServices.googleProvider : null;
 // Google provider custom parameters are set at login time to avoid unnecessary prompts
-const ordersCollection = window.firebaseServices.ordersCollection;
-const contactMessagesCollection = window.firebaseServices.contactMessagesCollection;
+const ordersCollection = window.firebaseServices && window.firebaseServices.ordersCollection ? window.firebaseServices.ordersCollection : (db ? db.collection('orders') : null);
+const contactMessagesCollection = window.firebaseServices && window.firebaseServices.contactMessagesCollection ? window.firebaseServices.contactMessagesCollection : (db ? db.collection('contactMessages') : null);
 // Firestore cart reference per user
 function getUserCartDoc(uid) {
     try {
@@ -124,6 +49,10 @@ async function loadCartForUser(uid) {
             await saveCartForUser(uid);
         }
     } catch (e) {
+        if (e && e.code === 'permission-denied') {
+            console.warn('Cart read denied by Firestore rules. Skipping server cart load.');
+            return;
+        }
         console.warn('Failed to load user cart:', e);
     }
 }
@@ -137,6 +66,10 @@ async function saveCartForUser(uid) {
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true });
     } catch (e) {
+        if (e && e.code === 'permission-denied') {
+            console.warn('Cart write denied by Firestore rules. Continuing with local cart only.');
+            return;
+        }
         console.warn('Failed to save user cart:', e);
     }
 }
@@ -217,18 +150,24 @@ function hideLoginModal() {
 
 // Login Functions
 function handleEmailLogin(email, password) {
-    // Check if Firebase is properly initialized
     if (!auth) {
         showNotification('Firebase not initialized. Please check your configuration.', 'error');
         return;
     }
+    if (navigator && navigator.onLine === false) {
+        showNotification('You appear to be offline. Please check your internet connection.', 'error');
+        return;
+    }
     
-    // Validate input
     if (!email || !password) {
         showNotification('Please enter both email and password', 'error');
         return;
     }
     
+    const loginBtn = document.querySelector('#loginForm .login-btn');
+    const originalLoginLabel = loginBtn ? loginBtn.innerHTML : '';
+    if (loginBtn) { loginBtn.disabled = true; loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in...'; }
+
     auth.signInWithEmailAndPassword(email, password)
         .then((userCredential) => {
             // Signed in successfully
@@ -251,7 +190,11 @@ function handleEmailLogin(email, password) {
             } catch (_) {}
         })
         .catch((error) => {
-            console.error('Login error:', error);
+            if (error && error.code === 'auth/network-request-failed') {
+                showNotification('Network error. Please check your connection and try again.', 'error');
+                if (loginBtn) { loginBtn.disabled = false; loginBtn.innerHTML = originalLoginLabel; }
+                return;
+            }
             let errorMessage = 'Login failed';
             
             switch (error.code) {
@@ -278,6 +221,7 @@ function handleEmailLogin(email, password) {
             }
             
             showNotification(errorMessage, 'error');
+            if (loginBtn) { loginBtn.disabled = false; loginBtn.innerHTML = originalLoginLabel; }
         });
 }
 
@@ -290,6 +234,11 @@ function handleGoogleLogin() {
     
     // Ensure the account chooser shows
     try { googleProvider.setCustomParameters({ prompt: 'select_account' }); } catch (_) {}
+    // Debounce: prevent conflicting popup requests
+    if (handleGoogleLogin._busy) { return; }
+    handleGoogleLogin._busy = true;
+    const btn = document.getElementById('googleSignInBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in...'; }
     
     // Prefer popup and fall back to redirect if needed
     auth.signInWithPopup(googleProvider)
@@ -312,10 +261,21 @@ function handleGoogleLogin() {
             navigateToHome();
         })
         .catch((error) => {
-            console.error('Google login error:', error);
+            if (error && error.code === 'auth/cancelled-popup-request') {
+                // benign; ignore
+                return;
+            }
             let errorMessage = 'Google login failed';
+            // If user ended up authenticated anyway, do not show an error
+            if (auth && auth.currentUser) {
+                navigateToHome();
+                return;
+            }
             
             switch (error.code) {
+                case 'auth/cancelled-popup-request':
+                    errorMessage = 'Another sign-in is in progress. Please try again.';
+                    break;
                 case 'auth/operation-not-supported-in-this-environment':
                     errorMessage = 'Please open this website in a web browser (not file://). Use a local server or deploy online.';
                     break;
@@ -342,6 +302,10 @@ function handleGoogleLogin() {
             }
             
             showNotification(errorMessage, 'error');
+        })
+        .finally(() => {
+            handleGoogleLogin._busy = false;
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fab fa-google"></i> Continue with Google'; }
         });
 }
 
@@ -482,6 +446,49 @@ function updateUserInfo(user) {
         userEmailElement.textContent = 'Not logged in';
         accountBtn.innerHTML = '<i class="fas fa-user-circle"></i>';
         accountBtn.style.color = 'white'; // Default color
+    }
+
+    // Load recent orders into dropdown on hover
+    const accountDropdown = document.getElementById('accountDropdown');
+    if (accountDropdown) {
+        accountDropdown.addEventListener('mouseenter', async () => {
+            try {
+                const containerId = 'recentOrdersContainer';
+                let container = document.getElementById(containerId);
+                if (!container) {
+                    container = document.createElement('div');
+                    container.id = containerId;
+                    container.style.padding = '10px 20px';
+                    container.style.borderTop = '1px solid #eee';
+                    accountDropdown.appendChild(container);
+                }
+                container.innerHTML = '<div style="color:#666;font-size:0.9rem;">Loading recent orders...</div>';
+                if (!ordersCollection || !currentUser) {
+                    container.innerHTML = '<div style="color:#666;font-size:0.9rem;">No orders yet.</div>';
+                    return;
+                }
+                const snap = await ordersCollection
+                    .where('userId', '==', currentUser.uid)
+                    .orderBy('timestamp', 'desc')
+                    .limit(3)
+                    .get();
+                if (snap.empty) {
+                    container.innerHTML = '<div style="color:#666;font-size:0.9rem;">No orders yet.</div>';
+                    return;
+                }
+                const items = [];
+                snap.forEach(doc => {
+                    const d = doc.data();
+                    items.push(`<div style=\"display:flex;justify-content:space-between;gap:8px;margin:6px 0;\">`+
+                        `<span style=\"color:#333;\">#${doc.id.substring(0,6)}</span>`+
+                        `<span style=\"color:#667eea;\">Rs ${d.total || d.totalAmount || 0}</span>`+
+                    `</div>`);
+                });
+                container.innerHTML = '<div style="font-weight:600;margin-bottom:6px;color:#333;">Recent Orders</div>' + items.join('');
+            } catch (_) {
+                // ignore
+            }
+        }, { once: true });
     }
 }
 
@@ -933,7 +940,7 @@ function loadProducts(productsToShow = null, showAll = false) {
         }
     }
     
-    // Show loading animation
+    // Show loading animation briefly
     productsGrid.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner fa-spin"></i> Loading products...</div>';
     
     setTimeout(() => {
@@ -967,7 +974,7 @@ function loadProducts(productsToShow = null, showAll = false) {
                 </div>
             </div>
         `).join('');
-    }, 500); // Small delay for loading effect
+    }, 150);
 }
 
 // Modal functionality
@@ -1074,14 +1081,14 @@ function addToCart(productId) {
     cartCount.classList.add('cart-count-pulse');
     setTimeout(() => {
         cartCount.classList.remove('cart-count-pulse');
-    }, 500);
+    }, 300);
     
     // Add bounce effect to the product card
     const productCard = event.target.closest('.product-card');
     productCard.classList.add('product-added');
     setTimeout(() => {
         productCard.classList.remove('product-added');
-    }, 600);
+    }, 350);
     
     // Show success message with enhanced animation
     showNotification(`✨ ${product.name} added to cart! ✨`, 'success');
@@ -1247,6 +1254,11 @@ function updateCheckoutSummary() {
 function handlePlaceOrder(event) {
     event.preventDefault();
     
+    // Disable button to avoid duplicate submissions
+    const submitBtn = event.target.querySelector('button[type="submit"]');
+    const originalLabel = submitBtn ? submitBtn.innerHTML : '';
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Placing...'; }
+
     // Get form data
     const formData = new FormData(event.target);
     const orderData = {
@@ -1289,6 +1301,8 @@ function handlePlaceOrder(event) {
     
     // Save order to Firebase
     saveOrderToFirebase(orderData);
+
+    // Re-enable after async completes via listeners
 }
 
 function validateCheckoutForm(orderData) {
@@ -1332,17 +1346,52 @@ function saveOrderToFirebase(orderData) {
             closeCheckoutModal();
             
             // Show checkout animation instead of immediate success message
-            showCheckoutAnimation(orderData, docRef.id);
+            if (typeof showCheckoutAnimation === 'function') {
+                showCheckoutAnimation(orderData, docRef.id);
+            } else {
+                showOrderConfirmation(orderData, docRef.id);
+            }
+            // Re-enable any disabled submit button on the checkout form
+            const form = document.getElementById('checkoutForm');
+            if (form) {
+                const btn = form.querySelector('button[type="submit"]');
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-shopping-cart"></i> Place Order'; }
+            }
         })
         .catch((error) => {
             console.error('Error saving order:', error);
-            showNotification('Failed to place order. Please try again.', 'error');
+            if (error && error.code === 'failed-precondition') {
+                showNotification('You appear to be offline. Please try again when online.', 'error');
+            } else {
+                showNotification('Failed to place order. Please try again.', 'error');
+            }
+            const form = document.getElementById('checkoutForm');
+            if (form) {
+                const btn = form.querySelector('button[type="submit"]');
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-shopping-cart"></i> Place Order'; }
+            }
         });
 }
 
 function showOrderConfirmation(orderData, orderId) {
     // Show confirmation in a modal instead of alert for better security
     showOrderConfirmationModal(orderData, orderId);
+}
+
+// Minimal checkout animation to avoid missing function errors
+function showCheckoutAnimation(orderData, orderId) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:5000;';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:white;border-radius:12px;padding:24px 28px;max-width:420px;width:90%;text-align:center;';
+    box.innerHTML = '<div style="font-size:48px;margin-bottom:10px;">✅</div>' +
+        '<h3 style="margin:0 0 8px 0;">Order Confirmed</h3>' +
+        `<p style="margin:0 0 6px 0;">Order ID: ${orderId}</p>` +
+        '<p style="margin:0;color:#666;">We\'ll contact you shortly.</p>';
+    overlay.appendChild(box);
+    overlay.addEventListener('click', () => overlay.remove());
+    document.body.appendChild(overlay);
+    setTimeout(() => overlay.remove(), 4000);
 }
 
 function showOrderConfirmationModal(orderData, orderId) {
@@ -1528,7 +1577,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     slideshow.addEventListener('mouseleave', () => {
-        startSlideshow();
+        // Keep faster cycle when resuming
+        clearInterval(slideInterval);
+        slideInterval = setInterval(() => { changeSlide(1); }, 4000);
     });
 });
 
@@ -1608,11 +1659,11 @@ style.textContent = `
     }
     
     .product-added {
-        animation: bounceIn 0.6s ease;
+        animation: bounceIn 0.35s ease;
     }
     
     .cart-count-pulse {
-        animation: pulse 0.5s ease-in-out;
+        animation: pulse 0.3s ease-in-out;
     }
 `;
 document.head.appendChild(style);
@@ -1744,70 +1795,73 @@ function validateContactForm(contactData) {
 }
 
 function saveContactMessageToFirebase(contactData) {
-    // Debug logging
-    console.log('Attempting to save contact message:', contactData);
-    console.log('Contact messages collection:', contactMessagesCollection);
-    console.log('Firebase auth state:', auth.currentUser);
-    
-    // Show loading state
-    const submitButton = document.querySelector('#contactForm button[type="submit"]');
-    const originalText = submitButton.textContent;
-    submitButton.textContent = 'Sending...';
-    submitButton.disabled = true;
-    
-    // Try to save without authentication first (for contact messages)
-    const contactDataWithoutAuth = {
-        name: contactData.name,
-        email: contactData.email,
-        message: contactData.message,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-        status: 'new',
-        userId: null // Allow anonymous contact messages
-    };
-    
-    contactMessagesCollection.add(contactDataWithoutAuth)
-        .then((docRef) => {
-            console.log('Contact message saved with ID:', docRef.id);
-            
-            // Show success message
-            showNotification('Thank you for your message! We will get back to you soon.', 'success');
-            
-            // Reset form
-            document.getElementById('contactForm').reset();
-            
-            // Reset button
-            submitButton.textContent = originalText;
-            submitButton.disabled = false;
-        })
-        .catch((error) => {
-            console.error('Error saving contact message:', error);
-            
-            // If permission denied, try with a different approach
-            if (error.code === 'permission-denied') {
-                console.log('Permission denied, trying alternative approach...');
-                
-                // Try saving to a different collection or with different rules
-                const alternativeCollection = db.collection('messages');
-                alternativeCollection.add(contactDataWithoutAuth)
-                    .then((docRef) => {
-                        console.log('Contact message saved to alternative collection with ID:', docRef.id);
-                        showNotification('Thank you for your message! We will get back to you soon.', 'success');
-                        document.getElementById('contactForm').reset();
-                        submitButton.textContent = originalText;
-                        submitButton.disabled = false;
-                    })
-                    .catch((altError) => {
-                        console.error('Alternative save also failed:', altError);
-                        showNotification('Failed to send message. Please try again later or contact us directly.', 'error');
-                        submitButton.textContent = originalText;
-                        submitButton.disabled = false;
-                    });
-            } else {
-                showNotification(`Failed to send message: ${error.message}`, 'error');
+    try {
+        // Show loading state
+        const submitButton = document.querySelector('#contactForm button[type="submit"]');
+        const originalText = submitButton ? submitButton.textContent : 'Send Message';
+        if (submitButton) {
+            submitButton.textContent = 'Sending...';
+            submitButton.disabled = true;
+        }
+
+        if (!db) {
+            showNotification('Unable to connect to database. Please try again later.', 'error');
+            if (submitButton) {
                 submitButton.textContent = originalText;
                 submitButton.disabled = false;
             }
-        });
+            return;
+        }
+
+        const targetCollection = contactMessagesCollection || db.collection('contactMessages');
+        const fallbackCollection = db.collection('messages');
+
+        const payload = {
+            name: contactData.name,
+            email: contactData.email,
+            message: contactData.message,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            status: 'new',
+            userId: null
+        };
+
+        const trySave = (collectionRef) => collectionRef.add(payload);
+
+        trySave(targetCollection)
+            .then((docRef) => {
+                showNotification('Thank you for your message! We will get back to you soon.', 'success');
+                const form = document.getElementById('contactForm');
+                if (form) form.reset();
+                if (submitButton) {
+                    submitButton.textContent = originalText;
+                    submitButton.disabled = false;
+                }
+            })
+            .catch((error) => {
+                // Fallback to alternative collection on any failure
+                trySave(fallbackCollection)
+                    .then(() => {
+                        showNotification('Thank you for your message! We will get back to you soon.', 'success');
+                        const form = document.getElementById('contactForm');
+                        if (form) form.reset();
+                        if (submitButton) {
+                            submitButton.textContent = originalText;
+                            submitButton.disabled = false;
+                        }
+                    })
+                    .catch((altError) => {
+                        console.error('Contact message save failed:', error, altError);
+                        showNotification('Failed to send message. Please try again later or contact us directly.', 'error');
+                        if (submitButton) {
+                            submitButton.textContent = originalText;
+                            submitButton.disabled = false;
+                        }
+                    });
+            });
+    } catch (e) {
+        console.error('Unexpected error saving contact message:', e);
+        showNotification('Something went wrong. Please try again later.', 'error');
+    }
 }
 
 // Form submission for contact form
@@ -1820,255 +1874,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 
-// Order Page Functionality
-let userOrders = [];
-let currentFilter = 'all';
-
-function showOrderPage() {
-    // Hide all sections
-    document.querySelectorAll('.section').forEach(section => {
-        section.style.display = 'none';
-    });
-    
-    // Show order page
-    const orderPage = document.getElementById('orderPage');
-    orderPage.style.display = 'block';
-    
-    // Load user orders
-    loadUserOrders();
-    
-    // Add premium animation
-    orderPage.style.animation = 'fadeInUp 0.6s ease-out';
-}
-
-function showShop() {
-    // Hide order page
-    document.getElementById('orderPage').style.display = 'none';
-    
-    // Show products section
-    showSection('products');
-}
-
-async function loadUserOrders() {
-    try {
-        if (!currentUser) {
-            showNoOrders();
-            return;
-        }
-
-        // Get orders from Firebase
-        const ordersSnapshot = await ordersCollection
-            .where('userId', '==', currentUser.uid)
-            .orderBy('timestamp', 'desc')
-            .get();
-
-        userOrders = [];
-        ordersSnapshot.forEach(doc => {
-            userOrders.push({
-                id: doc.id,
-                ...doc.data()
-            });
-        });
-
-        displayOrders();
-    } catch (error) {
-        console.error('Error loading orders:', error);
-        showNoOrders();
-    }
-}
-
-function displayOrders() {
-    const ordersList = document.getElementById('ordersList');
-    const noOrders = document.getElementById('noOrders');
-    
-    if (userOrders.length === 0) {
-        showNoOrders();
-        return;
-    }
-
-    // Filter orders based on current filter
-    const filteredOrders = currentFilter === 'all' 
-        ? userOrders 
-        : userOrders.filter(order => order.status === currentFilter);
-
-    if (filteredOrders.length === 0) {
-        showNoOrders();
-        return;
-    }
-
-    ordersList.innerHTML = '';
-    noOrders.style.display = 'none';
-
-    filteredOrders.forEach((order, index) => {
-        const orderCard = createOrderCard(order, index);
-        ordersList.appendChild(orderCard);
-    });
-}
-
-function createOrderCard(order, index) {
-    const orderCard = document.createElement('div');
-    orderCard.className = 'order-card card-hover stagger-item';
-    orderCard.style.animationDelay = `${index * 0.1}s`;
-    
-    const orderDate = order.timestamp ? 
-        new Date(order.timestamp.seconds * 1000).toLocaleDateString() : 
-        'Unknown Date';
-    
-    orderCard.innerHTML = `
-        <div class="order-card-header">
-            <div>
-                <div class="order-id">Order #${order.id.substring(0, 8)}</div>
-                <div class="order-date">${orderDate}</div>
-            </div>
-            <div class="order-status ${order.status}">${order.status}</div>
-        </div>
-        
-        <div class="order-items">
-            ${order.items.map(item => `
-                <div class="order-item">
-                    <img src="${item.image}" alt="${item.name}" class="item-image">
-                    <div class="item-details">
-                        <h4>${item.name}</h4>
-                        <p>₹${item.price}</p>
-                    </div>
-                    <div class="item-quantity">Qty: ${item.quantity}</div>
-                </div>
-            `).join('')}
-        </div>
-        
-        <div class="order-total">
-            <span>Total Amount:</span>
-            <span>₹${order.totalAmount}</span>
-        </div>
-        
-        <div class="order-actions">
-            <button class="order-action-btn view-details-btn" onclick="showOrderDetails('${order.id}')">
-                <i class="fas fa-eye"></i> View Details
-            </button>
-            <button class="order-action-btn track-order-btn" onclick="trackOrder('${order.id}')">
-                <i class="fas fa-truck"></i> Track Order
-            </button>
-        </div>
-    `;
-    
-    return orderCard;
-}
-
-function showNoOrders() {
-    const ordersList = document.getElementById('ordersList');
-    const noOrders = document.getElementById('noOrders');
-    
-    ordersList.innerHTML = '';
-    noOrders.style.display = 'block';
-}
-
-function showOrderDetails(orderId) {
-    const order = userOrders.find(o => o.id === orderId);
-    if (!order) return;
-
-    const modal = document.getElementById('orderDetailsModal');
-    const statusBadge = document.getElementById('orderStatusBadge');
-    const detailsBody = document.getElementById('orderDetailsBody');
-    
-    // Update status badge
-    statusBadge.textContent = order.status;
-    statusBadge.className = `order-status-badge ${order.status}`;
-    
-    // Create order details content
-    const orderDate = order.timestamp ? 
-        new Date(order.timestamp.seconds * 1000).toLocaleString() : 
-        'Unknown Date';
-    
-    detailsBody.innerHTML = `
-        <div class="detail-section">
-            <h4><i class="fas fa-info-circle"></i> Order Information</h4>
-            <div class="detail-item">
-                <span class="detail-label">Order ID:</span>
-                <span class="detail-value">${order.id}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Order Date:</span>
-                <span class="detail-value">${orderDate}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Status:</span>
-                <span class="detail-value">${order.status}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Total Amount:</span>
-                <span class="detail-value">₹${order.totalAmount}</span>
-            </div>
-        </div>
-        
-        <div class="detail-section">
-            <h4><i class="fas fa-shopping-bag"></i> Items Ordered</h4>
-            ${order.items.map(item => `
-                <div class="detail-item">
-                    <span class="detail-label">${item.name} (Qty: ${item.quantity})</span>
-                    <span class="detail-value">₹${item.price * item.quantity}</span>
-                </div>
-            `).join('')}
-        </div>
-        
-        <div class="detail-section">
-            <h4><i class="fas fa-user"></i> Customer Information</h4>
-            <div class="detail-item">
-                <span class="detail-label">Name:</span>
-                <span class="detail-value">${order.customerName}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Email:</span>
-                <span class="detail-value">${order.customerEmail}</span>
-            </div>
-            <div class="detail-item">
-                <span class="detail-label">Phone:</span>
-                <span class="detail-value">${order.customerPhone}</span>
-            </div>
-        </div>
-        
-        <div class="detail-section">
-            <h4><i class="fas fa-map-marker-alt"></i> Delivery Address</h4>
-            <div class="detail-item">
-                <span class="detail-label">Address:</span>
-                <span class="detail-value">${order.deliveryAddress}</span>
-            </div>
-        </div>
-    `;
-    
-    modal.style.display = 'flex';
-    modal.style.animation = 'fadeIn 0.3s ease-out';
-}
-
-function closeOrderDetails() {
-    const modal = document.getElementById('orderDetailsModal');
-    modal.style.display = 'none';
-}
-
-function trackOrder(orderId) {
-    // For now, just show a notification
-    showNotification('Order tracking feature coming soon!', 'info');
-}
-
-// Order filter functionality
-document.addEventListener('DOMContentLoaded', function() {
-    const filterButtons = document.querySelectorAll('.filter-btn');
-    
-    filterButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            // Remove active class from all buttons
-            filterButtons.forEach(btn => btn.classList.remove('active'));
-            
-            // Add active class to clicked button
-            this.classList.add('active');
-            
-            // Update current filter
-            currentFilter = this.getAttribute('data-filter');
-            
-            // Re-display orders
-            displayOrders();
-        });
-    });
-});
+// Removed unused Order Page code
 
 // Forgot Password Functionality
 function showForgotPassword() {

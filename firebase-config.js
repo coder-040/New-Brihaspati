@@ -46,9 +46,18 @@ CURRENT SETUP FOR DEVELOPMENT:
   const ordersCollection = db.collection('orders');
   const contactMessagesCollection = db.collection('contactMessages');
 
+  // App Check disabled for development to simplify login
+
   // Ensure auth persistence (records sessions reliably)
   try {
     auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+  } catch (_) {}
+
+  // Enable IndexedDb persistence for offline and improved reliability
+  try {
+    db.enablePersistence({ synchronizeTabs: true }).catch(function(err) {
+      // ignore persistence errors in unsupported browsers
+    });
   } catch (_) {}
 
   // Export for use in main script (single namespaced object)
