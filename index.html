@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brihaspati Stationery - Your Complete Stationery Store</title>
+    <link rel="icon" type="image/x-icon" href="Logo1.PNG">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com https://apis.google.com; script-src-elem 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; img-src 'self' https://images.unsplash.com https://lh3.googleusercontent.com https://domsindia.com https://www.htconline.in data:; font-src 'self' https://cdnjs.cloudflare.com; connect-src 'self' https://firestore.googleapis.com https://www.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://apis.google.com; frame-src 'self' https://*.firebaseapp.com https://*.google.com https://*.gstatic.com https://accounts.google.com https://apis.google.com https://*.googleusercontent.com; child-src 'self' https://*.firebaseapp.com https://*.google.com https://*.gstatic.com https://accounts.google.com https://apis.google.com https://*.googleusercontent.com; base-uri 'self'; form-action 'self';" />
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <!-- Secure Firebase Configuration -->
+    <script src="firebase-config.js"></script>
+    
+    <!-- 
+    SECURE FIREBASE SETUP COMPLETED:
+    - Firebase config moved to firebase-config.js
+    - All sensitive data protected
+    - Ready for GitHub deployment
+    - See DEPLOYMENT.md for setup instructions
+    -->
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="hamburger-menu" id="hamburgerMenu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <div class="nav-logo">
+                <h2>Brihaspati Stationery</h2>
+            </div>
+            <div class="nav-menu" id="navMenu">
+                <a href="#home" class="nav-link">Home</a>
+                <a href="#about" class="nav-link">About</a>
+                <a href="#products" class="nav-link">Products</a>
+                <a href="#contact" class="nav-link">Contact</a>
+            </div>
+            <div class="nav-search">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Search stationery...">
+                    <button onclick="searchProducts()"><i class="fas fa-search"></i></button>
+                </div>
+            </div>
+            <div class="nav-theme">
+                <button class="theme-toggle" onclick="toggleTheme()" id="themeToggle">
+                    <i class="fas fa-moon"></i>
+                </button>
+            </div>
+            <div class="nav-cart">
+                <button class="cart-btn" onclick="toggleCart()">
+                    <i class="fas fa-shopping-cart"></i>
+                    <span class="cart-count" id="cartCount">0</span>
+                </button>
+            </div>
+            <div class="nav-account">
+                <button class="account-btn" id="accountBtn" onclick="toggleAccountDropdown()">
+                    <i class="fas fa-user-circle"></i>
+                </button>
+                <!-- Account Dropdown -->
+                <div class="account-dropdown" id="accountDropdown">
+                    <div class="account-header">
+                        <div class="user-avatar">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <div class="user-info">
+                            <h3 id="userName">Guest User</h3>
+                            <p id="userEmail">Not logged in</p>
+                        </div>
+                    </div>
+                    <div class="account-menu">
+                        <a href="#" class="account-menu-item" id="profileLink">
+                            <i class="fas fa-user"></i> Profile
+                        </a>
+                        <a href="#" class="account-menu-item" id="ordersLink">
+                            <i class="fas fa-shopping-bag"></i> Orders
+                        </a>
+                        <a href="#" class="account-menu-item" id="settingsLink">
+                            <i class="fas fa-cog"></i> Settings
+                        </a>
+                        <hr class="account-divider">
+                        <a href="#" class="account-menu-item logout-item" id="logoutLink">
+                            <i class="fas fa-sign-out-alt"></i> Logout
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Cart Dropdown -->
+        <div class="cart-dropdown" id="cartDropdown">
+            <div class="cart-header">
+                <h3>Shopping Cart</h3>
+                <button class="close-cart" onclick="toggleCart()">&times;</button>
+            </div>
+            <div class="cart-items" id="cartItems">
+                <p class="empty-cart">Your cart is empty</p>
+            </div>
+            <div class="cart-footer">
+                <div class="cart-total">
+                    <strong>Total: Rs <span id="cartTotal">0</span></strong>
+                </div>
+                <button class="checkout-btn" onclick="checkout()">Checkout</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Home Anchor for navigation -->
+    <div id="home" style="position: relative; top: -80px; height: 0;"></div>
+
+    <!-- Login Modal -->
+    <div class="login-modal-overlay" id="loginModalOverlay">
+        <div class="login-modal-content">
+            <div class="login-header">
+                <h2>Welcome to Brihaspati Stationery</h2>
+                <p>Please sign in to continue shopping</p>
+                <div class="environment-warning" id="environmentWarning" style="display: none;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>For Firebase to work, please run this website on a local server or deploy it online. Opening the HTML file directly won't work.</p>
+                </div>
+            </div>
+            <div class="login-form">
+                <!-- Firebase Authentication Form -->
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="email">Email Address</label>
+                        <input type="email" id="email" name="email" placeholder="Enter your email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" placeholder="Enter your password" required>
+                    </div>
+                    <button type="submit" class="login-btn">
+                        <i class="fas fa-sign-in-alt"></i> Sign In
+                    </button>
+                </form>
+
+                <!-- Sign Up Form -->
+                <form id="signupForm" style="display: none;">
+                    <div class="form-group">
+                        <label for="signupEmail">Email Address</label>
+                        <input type="email" id="signupEmail" name="signupEmail" placeholder="Enter your email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signupPassword">Password</label>
+                        <input type="password" id="signupPassword" name="signupPassword" placeholder="Create a password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signupConfirmPassword">Confirm Password</label>
+                        <input type="password" id="signupConfirmPassword" name="signupConfirmPassword" placeholder="Confirm your password" required>
+                    </div>
+                    <button type="submit" class="login-btn">
+                        <i class="fas fa-user-plus"></i> Create Account
+                    </button>
+                </form>
+                
+                <!-- Google Sign-In Button -->
+                <div class="google-login-section" id="googleLoginSection">
+                    <div class="divider">
+                        <span>or</span>
+                    </div>
+                    <button class="google-login-btn" id="googleSignInBtn">
+                        <i class="fab fa-google"></i> Continue with Google
+                    </button>
+                </div>
+                
+                <div class="login-footer" id="loginFooter">
+                    <p>Don't have an account? <a href="#" id="signUpLink">Sign up here</a></p>
+                    <p><a href="#" id="forgotPasswordLink">Forgot your password?</a></p>
+                </div>
+                <div class="login-footer" id="signupFooter" style="display: none;">
+                    <p>Already have an account? <a href="#" id="signInLink">Sign in</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Checkout Modal -->
+    <div class="checkout-modal-overlay" id="checkoutModalOverlay">
+        <div class="checkout-modal-content">
+            <div class="checkout-header">
+                <h2>Checkout</h2>
+                <button class="checkout-close" onclick="closeCheckoutModal()">&times;</button>
+            </div>
+            
+            <div class="checkout-body">
+                <!-- Cart Summary -->
+                <div class="checkout-summary">
+                    <h3>Order Summary</h3>
+                    <div class="checkout-items" id="checkoutItems">
+                        <!-- Cart items will be displayed here -->
+                    </div>
+                    <div class="checkout-total">
+                        <strong>Total: Rs <span id="checkoutTotal">0</span></strong>
+                    </div>
+                </div>
+                
+                <!-- Customer Information Form -->
+                <div class="checkout-form">
+                    <h3>Delivery Information</h3>
+                    <form id="checkoutForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="customerName">Full Name *</label>
+                                <input type="text" id="customerName" name="customerName" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="customerEmail">Email Address *</label>
+                                <input type="email" id="customerEmail" name="customerEmail" required>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="customerPhone">Mobile Number *</label>
+                                <input type="tel" id="customerPhone" name="customerPhone" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="customerCity">City *</label>
+                                <input type="text" id="customerCity" name="customerCity" required>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="deliveryAddress">Delivery Address *</label>
+                            <textarea id="deliveryAddress" name="deliveryAddress" rows="3" required placeholder="Enter complete address with landmark"></textarea>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="paymentMethod">Payment Method *</label>
+                            <div class="payment-options">
+                                <label class="payment-option">
+                                    <input type="radio" name="paymentMethod" value="cod" checked>
+                                    <span class="payment-label">
+                                        <i class="fas fa-money-bill-wave"></i>
+                                        Cash on Delivery (COD)
+                                    </span>
+                                </label>
+                                <label class="payment-option">
+                                    <input type="radio" name="paymentMethod" value="online">
+                                    <span class="payment-label">
+                                        <i class="fas fa-credit-card"></i>
+                                        Online Payment
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="checkout-actions">
+                            <button type="button" class="cancel-btn" onclick="closeCheckoutModal()">Cancel</button>
+                            <button type="submit" class="place-order-btn">
+                                <i class="fas fa-shopping-cart"></i>
+                                Place Order
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Forgot Password Modal -->
+    <div class="modal-overlay" id="forgotPasswordModal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeForgotPassword()">&times;</button>
+            <div class="forgot-password-content">
+                <h3>Reset Password</h3>
+                <p>Enter your email address and we'll send you a link to reset your password.</p>
+                <form id="forgotPasswordForm">
+                    <div class="form-group">
+                        <input type="email" id="resetEmail" placeholder="Enter your email" required>
+                    </div>
+                    <button type="submit" class="reset-password-btn">
+                        <span class="btn-text">Send Reset Link</span>
+                        <span class="btn-loading" style="display: none;">
+                            <i class="fas fa-spinner fa-spin"></i> Sending...
+                        </span>
+                    </button>
+                </form>
+                <div class="forgot-password-success" id="forgotPasswordSuccess" style="display: none;">
+                    <i class="fas fa-check-circle"></i>
+                    <p>Reset link sent! Check your email.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick View Modal -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+            <div class="modal-body">
+                <img id="modalImage" src="" alt="Product Image" class="modal-image">
+                <div class="modal-info">
+                    <h3 id="modalTitle"></h3>
+                    <p id="modalDescription"></p>
+                    <div class="modal-price" id="modalPrice"></div>
+                    <button class="modal-add-cart" onclick="addToCartFromModal()">
+                        <i class="fas fa-cart-plus"></i> Add to Cart
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Slideshow -->
+    <div class="slideshow-container">
+        <div class="slide active">
+            <img src="https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=1200&h=500&fit=crop&crop=center&auto=format&q=80" alt="Stationery Collection" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwMCIgaGVpZ2h0PSI1MDAiIHZpZXdCb3g9IjAgMCAxMjAwIDUwMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iNTAwIiBmaWxsPSIjNjY3ZWVhIi8+Cjx0ZXh0IHg9IjYwMCIgeT0iMjUwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSJ3aGl0ZSIgZm9udC1zaXplPSI0OCIgZm9udC1mYW1pbHk9IkFyaWFsIj5TdGF0aW9uZXJ5IENvbGxlY3Rpb248L3RleHQ+Cjwvc3ZnPgo='">
+            <div class="slide-text">
+                <h2>Premium Stationery Collection</h2>
+                <p>Discover our wide range of quality stationery items</p>
+            </div>
+        </div>
+        <div class="slide">
+            <img src="https://images.unsplash.com/photo-1586953208448-b95a79798f07?w=1200&h=500&fit=crop&crop=center&auto=format&q=80" alt="Writing Tools" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwMCIgaGVpZ2h0PSI1MDAiIHZpZXdCb3g9IjAgMCAxMjAwIDUwMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iNTAwIiBmaWxsPSIjNzY0YmEyIi8+Cjx0ZXh0IHg9IjYwMCIgeT0iMjUwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSJ3aGl0ZSIgZm9udC1zaXplPSI0OCIgZm9udC1mYW1pbHk9IkFyaWFsIj5Xcml0aW5nIFRvb2xzPC90ZXh0Pgo8L3N2Zz4K'">
+            <div class="slide-text">
+                <h2>Professional Writing Tools</h2>
+                <p>From pens to pencils, everything you need for writing</p>
+            </div>
+        </div>
+        <div class="slide">
+            <img src="https://images.unsplash.com/photo-1606983340126-99ab4feaa64a?w=1200&h=500&fit=crop&crop=center&auto=format&q=80" alt="Office Supplies" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwMCIgaGVpZ2h0PSI1MDAiIHZpZXdCb3g9IjAgMCAxMjAwIDUwMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iNTAwIiBmaWxsPSIjZjA5M2ZiIi8+Cjx0ZXh0IHg9IjYwMCIgeT0iMjUwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSJ3aGl0ZSIgZm9udC1zaXplPSI0OCIgZm9udC1mYW1pbHk9IkFyaWFsIj5PZmZpY2UgU3VwcGxpZXM8L3RleHQ+Cjwvc3ZnPgo='">
+            <div class="slide-text">
+                <h2>Office & School Supplies</h2>
+                <p>Complete your workspace with our office essentials</p>
+            </div>
+        </div>
+        <button class="prev" onclick="changeSlide(-1)">&#10094;</button>
+        <button class="next" onclick="changeSlide(1)">&#10095;</button>
+    </div>
+
+    <!-- About Section -->
+    <section class="about-section" id="about">
+        <div class="container">
+            <h2 class="section-title">About Brihaspati Stationery</h2>
+            <div class="about-content">
+                <div class="about-text">
+                    <p>Welcome to Brihaspati Stationery, your trusted partner for all stationery needs. We provide high-quality stationery products for students, professionals, and businesses. Our commitment to excellence and customer satisfaction has made us a leading stationery store.</p>
+                    <p>From premium pens and notebooks to office supplies and art materials, we have everything you need to succeed in your studies and work. Shop with confidence knowing that every product meets our strict quality standards.</p>
+                </div>
+                <div class="about-features">
+                    <div class="feature-item">
+                        <i class="fas fa-star"></i>
+                        <h3>Premium Quality</h3>
+                        <p>All products are carefully selected for their superior quality</p>
+                    </div>
+                    <div class="feature-item">
+                        <i class="fas fa-shipping-fast"></i>
+                        <h3>Fast Delivery</h3>
+                        <p>Quick and reliable delivery to your doorstep</p>
+                    </div>
+                    <div class="feature-item">
+                        <i class="fas fa-heart"></i>
+                        <h3>Customer Care</h3>
+                        <p>Dedicated customer support for all your needs</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Products Section -->
+    <section class="products-section" id="products">
+        <div class="container">
+            <h2 class="section-title">Our Products</h2>
+            <div class="products-grid" id="productsGrid">
+                <!-- Products will be dynamically loaded here -->
+            </div>
+            <div class="no-products" id="noProducts" style="display: none;">
+                <i class="fas fa-search"></i>
+                <h3>Sorry, we don't have that product</h3>
+                <p>Please try searching for something else</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section class="contact-section" id="contact">
+        <div class="container">
+            <h2 class="section-title">Contact Us</h2>
+            <div class="contact-content">
+                <div class="contact-info">
+                    <div class="contact-item">
+                        <i class="fas fa-map-marker-alt"></i>
+                        <div>
+                            <h3>Address</h3>
+                            <p>Ghalechowk,Rambazar-15<br>Pokhara, Nepal</p>
+                        </div>
+                    </div>
+                    <div class="contact-item">
+                        <i class="fas fa-phone"></i>
+                        <div>
+                            <h3>Phone</h3>
+                            <p>+977 9846395468</p>
+                        </div>
+                    </div>
+                    <div class="contact-item">
+                        <i class="fas fa-envelope"></i>
+                        <div>
+                            <h3>Email</h3>
+                            <p>newbrihaspatistationery@gmail.com</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="contact-form">
+                    <form id="contactForm">
+                        <input type="text" id="contactName" name="contactName" placeholder="Your Name" required>
+                        <input type="email" id="contactEmail" name="contactEmail" placeholder="Your Email" required>
+                        <textarea id="contactMessage" name="contactMessage" placeholder="Your Message" rows="5" required></textarea>
+                        <button type="submit">Send Message</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3>Brihaspati Stationery</h3>
+                    <p>Your one-stop destination for all stationery needs. Quality products at affordable prices.</p>
+                    <div class="social-links">
+                        <a href="#"><i class="fab fa-facebook"></i></a>
+                        <a href="#"><i class="fab fa-twitter"></i></a>
+                        <a href="#"><i class="fab fa-instagram"></i></a>
+                    </div>
+                </div>
+                <div class="footer-section">
+                    <h3>Quick Links</h3>
+                    <ul>
+                        <li><a href="#home">Home</a></li>
+                        <li><a href="#products">Products</a></li>
+                        <li><a href="#about">About</a></li>
+                        <li><a href="#contact">Contact</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h3>Categories</h3>
+                    <ul>
+                        <li><a href="#">Pens & Pencils</a></li>
+                        <li><a href="#">Notebooks</a></li>
+                        <li><a href="#">Office Supplies</a></li>
+                        <li><a href="#">Art Materials</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 Brihaspati Stationery. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
