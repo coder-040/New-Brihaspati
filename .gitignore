@@ -1,6 +1,3 @@
-# Firebase Configuration (if using separate config file)
-firebase-config.js
-
 # Environment Variables
 .env
 .env.local
